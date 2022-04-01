@@ -1,0 +1,20 @@
+## Author
+
+- **Name:** Yihao Zhao
+- **Email:** yihao4@illinois.edu
+
+## Purpose
+
+This app is for people have a clear view on how COVID.19 affect the deaths across the United States. More specifically, people can view the death rate and and death number out of COVID.19 in each State in both graphical and numerical ways. Besides, we can also compare the death number of COVID.19 from other deaths such as Pneumonia Deaths or Influenza Deaths.
+
+## Data
+
+- **Dataset:** Provisional COVID-19 Deaths by Sex and Age
+- **Source:** CDC Data
+- **Content:** This dataset contains data such as the date, the group of people, the state where people attributed to, the gender of people, the different age group, the amount of people dead out of Covid-19, the total number of people dead, the amount of people dead out of Covid-19 and Pneumonia, the amount of people dead out of influenza, the amount of people dead out of Covid-19, Pneumonia, and influenza, Footnate.
+
+## References
+
+- **Source of the data:** Data Provided by National Center for Health Statistics
+- **Data obtained from:** "Data.CDC.gov"
+
