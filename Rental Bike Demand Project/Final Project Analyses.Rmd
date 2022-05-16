@@ -1,0 +1,262 @@
+---
+title: "Final Course Project"
+author: "Yihao Zhao"
+date: "5/6/2022"
+output: pdf_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+# Team member: 
+-	Yihao Zhao
+
+#	Dataset: 
+
+-	Dataset: The provided Bike data set from canvas (Data Source :"http://data.seoul.go.kr/")
+
+#	Goals of analysis:
+-	Response quantitative variable: Rented Bike Counts
+
+- Anticipated explanatory variables: "Hour", "Temperature.C.", "Humidity...", "Wind.speed..m.s.", "Visibility..10m.", "Dew.point.temperature.C.", "Solar.Radiation..MJ.m2.", "Rainfall.mm.", "Snowfall..cm." ,"Seasons", "Holiday", "Date"                    
+
+# Possible question & interests
+
+- The prediction of bike count required at each hour for the stable supply of rental bikes.
+
+- What are some strong relationship predictor variables for predicting the rented bike counts?
+
+- What are some unnecessary variables that can take out of the linear model to make our model more accreted? 
+
+- What is the best optimal model for predicting the rented bike counts in this data?
+
+# Set up
+
+```{r}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(MASS)
+library(faraway)
+```
+
+
+# Importing $ cleaning datasets
+
+```{r}
+#Importing the datasets
+bike = read.csv("bike.csv")
+
+# Create a Date variable as format of Year-Month-Day
+bike = bike %>% 
+  mutate(Date = paste(Month, Day, Year))
+  
+bike$Date = str_replace_all(bike$Date, " ", "/")
+
+bike = bike %>% 
+  mutate(Date = as.Date(Date,"%m/%d/%y"))
+
+# Deselect the Month, Day, and Year columns
+bike = bike[-c(2,3,4)]
+head(bike)
+
+```
+# Generate & interpret a histogram for the Rented Bind Count.
+
+```{r}
+ggplot(bike, mapping = aes(x = Rented.Bike.Count)) +
+  geom_histogram(bins = 30) +
+  labs(x = "Rented Bike Counts at each hour", y = "Frequency", title = "Histogram of Rented Bike Count")
+```
+
+**ANSWER:** From the histogram above, we can see that the center of the distribution of the rented bike counts per hour falls around 1500 bikes per hour, with a range of around 0 to 3500 bikes per hour There's peak around 200 or 300. There is also a couple of upper outliers above 2500. 
+
+# Generate summary statistics for Rented Bike Count.
+
+```{r}
+summary(bike$Rented.Bike.Count)
+```
+
+**ANSWER:** From the summary of the response variable of Rented Bike Count, we can see that the minimum is 4 bikes per month, median is 498 bikes per month, and the maximum is 3146 bikes per month.
+
+# Create a scatterplot matrix for Rented.Bike.Count and the quantitative predictors 
+
+```{r}
+pairs(Rented.Bike.Count ~ Date + Hour + Temperature.C. + Humidity... + Wind.speed..m.s. + Visibility..10m. + Dew.point.temperature.C. + Solar.Radiation..MJ.m2. + Rainfall.mm. + Snowfall..cm., bike)
+```
+
+**ANSWER:** 
+In general, it seems like the predictor variables of Month, Hour, Temperature.C., Humidity, Wind speed, Visibility, Dew.point.temperature.C., Solar.Radiation, Rainfall, Snowfall have a possible stronger relationship with the response variable Rented.Bike.Count. Within the predictor variables just mentioned, it seems like the variables of Month, Hour, Temperature.C., Visibility, Dew.point.temperature.c. have a positive linear relationship with the response variable, and the variables of Solar.Radiation, Rainfall, and Snowfall may have a negative linear relationship with the response variable. 
+
+Furthermore, it seems have some collinearity present between variable Month and Temperature.C., Month and Dew.point.temperature.C., Month and Year, Month and Rainfall, Temperature.C. and Dew.point.temperature, Temperature.C. and Solar Radiation, Temperature.C. and Rainfall, Temperature.C. and Snowfall, Visibility and Dew.point.temperature.C., Visibility and Snowfall, Wind speed and Snowfall, Snowfall and Solar Radiation, Snowfall and Temperature.
+
+In addition, it seems to indicates that the variables of Wind speed, Year, and Humidity may be good for a transformation. 
+
+# Generate side-by-side boxplots of the variable Rented.Bike.Count with the categorical variable of Seasons
+
+```{r}
+ggplot(bike, aes(x = Seasons, y = Rented.Bike.Count)) +
+  geom_boxplot() +
+  labs(title = "Rented Bike Count per Hour by Seasons")
+```
+
+**ANSWER:** From the side-by-side boxplot on the right, it seems to indicate that the center the number of the rented bike is around 900 bikes when it is the Autumn season as well as the season Summer, the center the number of the rented bike is about 600 bikes during Spring, the center of the rented bike counts is about 100 during Winter. Overall, it seems to indicate that the Winter season has the strongest negative relationship with the number of rented bikes.
+
+
+
+# Generate three statistical model dpending on the analysis reslut
+
+## Generate a first model, including all first-order terms for the predictors.
+
+```{r}
+model1 = lm(Rented.Bike.Count ~ . - X, bike)
+summary(model1)
+```
+
+
+**ANSWER:** Based on the summary of the model, we can see that the first model has significant level since its p-value is very small. The R-square value of this model is about 0.576, which indicates that about 57.6% of variation in rented bike count in Seoul bike sharing demand can be explained by this linear relationship with its all first-order terms of the predictors.
+
+## Generate a second model by adding the intercation terms of Hour&Seasons, Humidity...&Rainfall.mm., Temperature.C.& Solar.Radiation..MJ.m2.
+
+```{r}
+# Second generated model
+model2 = lm(Rented.Bike.Count ~ . - X + Hour:Seasons + Humidity...:Rainfall.mm., bike)
+# Performing ANOVA test between model1 and model2 
+anova(model1, model2)
+summary(model2)
+```
+
+
+**ANSWER:** I have added the interaction terms of predictors of Hour&Seasons, Humidity...&Rainfall.mm., and Temperature.C.& Solar.Radiation..MJ.m2. since I think these variables are somehow related, and I have use the ANOVA F-statistics test to prove that the added interaction terms of model2 is actually more preferable than model 1 since its p-value is 1.171e-12, which is much smaller than 0.05, which indicates that we have enough evidence to reject the null hypothesis of model1.
+
+Besides, based on the summary table of model2, we can see that the interaction terms of Hour:Seasons and Humidity...:Rainfall.mm. are statistical significant since the p-values of each of them are below 0.05.
+
+## Perform model selection based on the second model.
+
+```{r}
+n = nrow(bike) # the number of the rows of the bike data
+model3 = step(model2, direction = "both", k = log(n))
+# stepwise search model selection by metric of BIC
+```
+**ANSWER:** I have performed a model selection meth by using the stepwise search on the metric of BIC based on the model2, and the final model selected are "Hour", "Temperature.C.", "Humidity...", "Rainfall.mm.", "Seasons", Hour:Seaons, Humidity...:Rainfall.mm.
+
+
+
+# Interpretaions on one quantitative predictor & one categorical predictor based on model3
+
+```{r}
+# Correlation matrix of the subset of the dataset of bike
+round(cor(subset(bike, select = c(Rented.Bike.Count, Hour, Temperature.C., Humidity..., Rainfall.mm.))), 2)
+```
+
+```{r}
+summary(model3)
+```
+**Interpretations:** 
+
+Quantitative predictor (Temperature.C.): For a 1 degree of Celsius increase in Temperature on the bike renting day, I would expect the estimated rented bike counts to increase by 23, holding the other predictor variables constant.
+
+Categorical predictor (Seasons): The baseline level of the predictor Seasons is Autumn. For a season of Autumn, I would predict the average rented bike counts to increase by about 754, if the season is Spring, I would predict the average rented bike counts to decrease by around 180, if the season is Summer, I would predict the average rented bike counts to decrease by approximately 13, and if the season is Winter, I would predict the average rented bike counts to decrease by about 121, with the fixing values of the other predictors.
+
+
+# Compare the $R^2$ values between model1 and model3
+
+```{r}
+summary(model1)$r.square # R-square of model1
+summary(model3)$r.square # R-square of model3
+model3
+```
+
+**ANSWER:** Based on the above, we know that the $R^2$ of model 1 is about 0.56, and the $R^2$ of model 3 is about 0.62. As a result, I prefer model 3 since its $R^2$ is greater than the model1. In other words, the $R^2$ of model 1 indicates that there are about 56% of the variation in Rented Bike Counts can be explained by its linear relationship with the predictors of "Hour", "Temperature.C.", "Humidity...", "Wind. speed..m.s.", "Visibility..10m.", "Dew.point.temperature.C.", "Solar.Radiation..MJ.m2.", "Rainfall.mm.", "Snowfall..cm." ,"Seasons", "Holiday", "Date". The $R^2$ of model 3 indicates that approximately 62% of the variation in Rented Bike Counts can be explained by its linear relationship with the predictors of "Hour", "Temperature.C.", "Humidity...", "Solar. Radiation..MJ.m2.", "Rainfall.mm.", "Seasons", "Hour: Season", "Humidity...: Rainfall.mm."
+
+
+# Analyze model3
+
+## Write out the fitted model for the selected model.
+
+```{r}
+fitted_model = lm(Rented.Bike.Count ~ Hour + Temperature.C. + Humidity... + Solar.Radiation..MJ.m2. + 
+Rainfall.mm. + Seasons + Hour:Seasons + Humidity...:Rainfall.mm., bike) # model3
+
+fitted_model_reduced = lm(Rented.Bike.Count ~ Hour + Temperature.C. + Humidity... + Solar.Radiation..MJ.m2. + 
+Rainfall.mm., bike) # model that exclude categorical variables and interaction terms 
+```
+
+## Collinearity
+
+```{r}
+vif(fitted_model_reduced) # checking collinearity of each quantitative predictor1
+```
+
+**ANSWER:** I used the fitted model that exclude any categorical variables and interaction terms to perform the VIF function on this reduced fitted model. Based on the results, I am not concerned about collinearity on this model since the VIF of each quantitative predictor is smaller than 5.
+
+## Is collinearity something to be concerned about in linear regression?
+
+**ANSWER:** From what I have learned and understand so far, I think collinearity is something to be concerned about in linear regression for several reasons. First, Collineraity is when quantitative variables are highly correlated with each other, and it is sometimes called multicollinearity when it occurs in multiple linear regression. Second, collinearity is a problem because independent variables should be independent. If the degree of correlation between variables is high enough, it can cause problems when you fit the model and interpret the results. Besides, collinearity will undermine the statistical significance of each predictor variable. In other words, collinearity will reduce the precision of the estimated coefficients, hich leads to the untrusted p-values and low significance level of the model.
+
+## Unusual observation 
+
+```{r}
+n = length(resid(fitted_model)) # number of rows of data
+p = length(coef(fitted_model)) # number of coefficients
+hatvalues(fitted_model)[which(hatvalues(fitted_model) > 2 * p / n)] # high leverage observations
+rstandard(fitted_model)[which(abs(rstandard(fitted_model)) > 2)] # Outliers 
+cooks.distance(fitted_model)[which(cooks.distance(fitted_model) > 4 / n)] # influence points 
+```
+```{r}
+bike = bike[-c(62),] # filter out the unusual observation of 62
+par(mfrow = c(2, 2))
+plot(fitted_model)
+```
+
+**ANSWER:** Based on the default plots of the fitted model and the numerical support above, we can see that there are many potential influence observations and outliers, but the observation of 62 is especially unusual since it has the highest leverage of 0.92 and the highest cook's distance of 3.21. Besides, we can see that the point of 62 is above the cook's distance line of 0.5, which indicates that it is a very unusual point within the data.
+
+## Model complexity vs. Dataset Size
+
+```{r}
+n = length(resid(fitted_model)) # number of rows of data
+p = length(coef(fitted_model)) # number of coefficients
+5 * p  <= n # model complexity rule of thumb
+```
+
+**ANSWER:** I am not concerned about the size of my fitted model because the size of the bike data passed the model complexity rule of thumb; in other words, the number of rows of bike data is greater or equal to 5 times the amount of the coefficients of the fitted model.
+
+## Box-Cox Transformation of Response variable of y
+
+```{r}
+boxcox(fitted_model, plotit = TRUE, lambda = seq(0, 1, by = 0.1))
+```
+```{r}
+new_fitted_mode = lm((((Rented.Bike.Count^0.3) - 1) / 3) ~ Hour + Temperature.C. + Humidity... + Solar.Radiation..MJ.m2. + Rainfall.mm. + Seasons + Hour:Seasons + Humidity...:Rainfall.mm., bike) # create a new fitted model that use the previous Box-cox transformation on y.
+```
+
+**ANSWER:** Based on the Box-Cox plot above, I would approximate the 95% confidence interval for $\lambda$ at (0.28, 0.39). The center of this interval appears to be around a $\lambda$ of 0.3 The most optimal $\lambda$ would then correspond to a transformation of $Rented.Bike.Count^{0.3}-1 / (0.3)$. Alternatively, I could simply raise the Rented.Bike.Count variable to the 0.3th power, as this would approximate the full Box-Cox transformation.
+
+## Default plots Comparisons 
+
+```{r}
+par(mfrow = c(2, 2))
+plot(fitted_model) # before transformation
+```
+
+
+```{r}
+par(mfrow = c(2, 2))
+plot(new_fitted_mode) # after transformation
+```
+**ANSWER:** Based on the default plots above, we can see that the plots of "Residuals vs Fitted value", Normal QQ plot, and Scale-Location plot look much better after the transformation of $Rented.Bike.Count^{0.3}-1 / (0.3)$ on response variable. Which indicates it fairly meets the assumption of LINE. 
+
+# Statistical test
+
+```{r}
+summary(fitted_model)$r.square # R-square of fitted model
+summary(new_fitted_mode)$r.square # R-square of new fitted model after transformation
+```
+**ANSWER:** Based on the $R^2$ above, I prefer the new fitted model since it has a greater $R^2$ value, which indicates that it has more variation, about 68%, can be explained by its linear realtionship with the same preditors as fiited model. 
+
+```{r}
+new_fitted_mode = lm((((Rented.Bike.Count^0.3) - 1) / 3) ~ Hour + Temperature.C. + Humidity... + Solar.Radiation..MJ.m2. + Rainfall.mm. + Seasons + Hour:Seasons + Humidity...:Rainfall.mm., bike)
+anova(new_fitted_mode)
+```
+
+**ANSWER:** By performing the one-way ANOVA test on the new model 3 with transformed response variable of Rented.Bike.Count^{0.3}-1 / (0.3) on the new bike dataset that filtered out the unusual observation of 62. Since the p-value of each corresponding coefficient is all below the level of 0.05, except the interaction term of Hour & Seasons. This indicates that there is enough evidence to reject the null hypothesis of each coefficient except for the interaction term of Hour & Seasons; the null hypothesis of each coefficient is the estimated coefficient equal to zero. Therefore, the interaction term of Hour $ Seasons could be removed from model 3 since it does not have a statistically significant.
+
