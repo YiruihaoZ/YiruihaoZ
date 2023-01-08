@@ -1,0 +1,128 @@
+---
+title: "STAT447-fa22-final"
+author: "Ziyue Yang"
+date: "2022-12-04"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import data and Data cleaning
+
+Import data from database file
+
+```{r import data}
+raw_data=data.table::fread('globalterrorismdb_0221dist.csv')
+dim(raw_data)
+```
+
+### Do data cleaning
+
+Original data have 136 features
+
+```{r}
+str(raw_data)
+```
+
+After analysis we pick 14 feature as shown below:
+
+```{r}
+selected = raw_data[,c('gname','country','latitude','longitude','success','suicide','attacktype1','targtype1','claimed','weaptype1','nkill','nwound','property','ransom'),]
+```
+
+Also, there are lots of terrorist groups, and most of them have few records. We believe activate groups can be great threats to the world. In this project, we find the most active 𝑘 terrorist groups by amount of attacks their launched.
+
+```{r}
+group = as.data.frame(table(selected$gname))
+tail(head(group[order(-group$Freq),],11),10)
+```
+
+As table shown above, we focus on these most active 𝑘 terrorist groups in next analysis.\
+
+```{r}
+groups_name=as.character(head(group[order(-group$Freq),"Var1"],11))
+groups_name=tail(groups_name,10)
+groups_name
+```
+
+```{r}
+selected = selected[gname%in%groups_name,,]
+str(selected)
+```
+
+```{r}
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+```
+
+Convert all NA to 0.
+
+```{r}
+selected[is.na(selected)] <- 0
+str(selected)
+```
+
+## KNN
+
+```{r}
+#Install class package
+install.packages('class')
+# Load class package
+library(class)
+```
+
+### Data splitting
+
+Randomly select 70% data as training set.
+
+```{r}
+set.seed(123)
+#random selection of 70% data.
+index = sample(1:nrow(selected),size=nrow(selected)*0.7,replace = FALSE)
+train_labels = selected[index,gname]
+test_labels = selected[-index,gname]
+selected <- as.data.frame(lapply(selected[,2:NCOL(selected)], normalize))
+train = selected[index,]
+test = selected[-index,]
+```
+
+### Training
+
+```{r}
+#Find the number of observation
+NROW(train_labels)
+```
+
+Since $\sqrt{30263}\approx175$, we set K value of our model as 175.
+
+We can obtain results when we use all 14 features.
+
+```{r}
+model = knn(train=train, test=test, cl=train_labels, k=175)
+ACC <- 100 * sum(test_labels == model)/NROW(test_labels)
+ACC
+```
+
+If we remove specific location information like 'latitude' and 'longitude', we will have a worse result as below.
+
+```{r}
+selected1 = raw_data[,c('gname','country','success','suicide','attacktype1','targtype1','claimed','weaptype1','nkill','nwound','property','ransom'),]
+selected1 = selected1[gname%in%groups_name,,]
+selected1[is.na(selected1)] <- 0
+index = sample(1:nrow(selected1),size=nrow(selected1)*0.7,replace = FALSE)
+train_labels = selected1[index,gname]
+test_labels = selected1[-index,gname]
+selected1 <- as.data.frame(lapply(selected1[,2:NCOL(selected1)], normalize))
+train = selected1[index,]
+test = selected1[-index,]
+model = knn(train=train, test=test, cl=train_labels, k=175)
+ACC <- 100 * sum(test_labels == model)/NROW(test_labels)
+ACC
+```
+
+KNN performs not good in this prediction tasks. Actually, KNN predicts the target value by the similarities between instances and the similarity is measured by the Euclidean distance. However, about 80% of the features in the GTD dataset are categorical variables, in which distance cannot precisely reflect the in- formation. Thus KNN can only give us a good result when we introduce location information as features on this task.

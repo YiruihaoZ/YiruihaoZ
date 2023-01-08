@@ -1,0 +1,71 @@
+---
+title: "Model for Terrosist Data"
+output: html_document
+date: '2022-12-05'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Loading in libraries and data.
+```{r}
+library("readxl")
+library("randomForest")
+library("ggplot2")
+library("dplyr")
+library("caret")
+library("caTools")
+```
+
+
+```{r}
+Data <- read_excel("globalterrorismdb_0522dist.xlsx")
+head(Data)
+```
+
+## Extracting/cleaning relevant features for further analysis.
+```{r}
+df = Data %>% select('country','latitude','longitude','success','suicide','attacktype1','attacktype1_txt','targtype1','claimed','weaptype1','nkill','nwound','property','ransom')
+str(df)
+```
+
+```{r}
+attackType = df %>%
+  group_by(attacktype1_txt) %>%
+  count() %>%
+  arrange(desc(n))
+
+dfCleaned = df %>%
+  filter(attacktype1_txt%in%attackType$attacktype1_txt)
+dfCleaned[is.na(dfCleaned)] = 0
+str(dfCleaned)
+```
+## Splitting the data
+
+```{r}
+sample <- sample.split(dfCleaned$attacktype1_txt, SplitRatio = 0.8)
+train  <- subset(dfCleaned, sample == TRUE)
+test   <- subset(dfCleaned, sample == FALSE)
+dim(train)
+dim(test)
+```
+## Creating the Random Forest Model
+```{r}
+train$attacktype1_txt <- as.factor(train$attacktype1_txt)
+model <- randomForest(attacktype1_txt~.,data= train)
+model
+```
+
+## Predictions
+
+```{r}
+predict <- predict(model, test, type = "class")
+```
+
+##Evaluation
+```{r}
+confusionMatrix(predict, as.factor(test$attacktype1_txt))
+```
+

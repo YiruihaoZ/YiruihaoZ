@@ -1,0 +1,106 @@
+---
+title: "Random Forest Approach"
+output: html_document
+author: "Minjun Kim"
+date: "2022-12-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+# Libraries
+```{r}
+library("readxl")
+library("randomForest")
+library("ggplot2")
+library("dplyr")
+library("caret")
+library("caTools")
+```
+
+# Import Data
+```{r}
+excel_path <- read_excel("globalterrorismdb_0522dist.xlsx")
+head(excel_path)
+str(excel_path)
+```
+## Attack Counts By Region data frame
+```{r}
+attack_count = excel_path |>
+  group_by(region_txt, iyear) |>
+  summarise(total_count=n(), .groups = 'drop') |>
+  as.data.frame()
+```
+
+## Plot Attack Counts By Region
+```{r}
+ggplot(attack_count, aes(x=iyear, y=total_count, group=region_txt, col=region_txt)) +
+  labs(title = "Attack Counts By Region") +
+  xlab("Year") +
+  ylab("Attack Counts") +
+  geom_line(size = 1.05)
+```
+
+## Attack Target data frame
+```{r}
+attack_target = excel_path |>
+  group_by(targtype1_txt) |>
+  summarise(total_count=n(), .groups = 'drop') |>
+  as.data.frame()
+```
+
+## Plot Attack Target
+```{r}
+ggplot(attack_target, aes(x = reorder(targtype1_txt, total_count), y = total_count)) +
+  coord_flip() +
+  theme(legend.position = "none") +
+  xlab("") +
+  ylab("") +
+  labs(title = "Attack Target") +
+  geom_bar(stat='identity')
+```
+# Data Cleaning
+```{r}
+features = c('country','latitude','longitude','success','suicide','attacktype1','targtype1','gname','claimed','weaptype1','nkill','nwound','property','ransom')
+feat = excel_path[features]
+str(feat)
+perpetrator = feat |>
+  group_by(gname) |>
+  count() |>
+  arrange(desc(n)) |>
+  head(10)
+feat2 = feat |>
+  filter(gname%in%perpetrator$gname)
+feat2[is.na(feat2)] = 0
+str(feat2)
+```
+
+# Split Data 
+```{r}
+sample <- sample.split(feat2$gname, SplitRatio = 0.7)
+train  <- subset(feat2, sample == TRUE)
+test   <- subset(feat2, sample == FALSE)
+dim(train)
+dim(test)
+```
+
+# Creating Random Forest Model
+```{r}
+train$gname <- as.factor(train$gname)
+model <- randomForest(gname~.,data= train)
+model
+```
+
+# Making Predictions
+```{r}
+predict <- predict(model, test, type = "class")
+```
+
+# Evaluation
+```{r}
+confusionMatrix(predict, as.factor(test$gname))
+```
+
+

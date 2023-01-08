@@ -1,0 +1,28 @@
+---
+title: "Visualization and Prediction of Terrorist Attacks Final Report"
+output: html_document
+date: '2022-12-07'
+---
+
+
+## Team Member Names and NetIDs:
+### Minjun Kim (minjunk2)
+### Feiran Qin (feiranq2)
+### Jawad Haq (jhaq2)
+### Yihao Zhao (yihao4)
+### Ziyue Yang (ziyue9)
+
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r}
+knitr::include_graphics("GTD.png")
+```
+
+```{r}
+library("readxl")
+Data <- read_excel("globalterrorismdb_0522dist.xlsx")
+str(Data)
+```

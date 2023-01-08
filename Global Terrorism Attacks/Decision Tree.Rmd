@@ -1,0 +1,152 @@
+---
+title: "Decision Tree Regression Models"
+author: "Yihao Zhao"
+date: "12/6/2022"
+output: html_document
+---
+
+## Import the libraries
+
+```{r}
+library(readxl)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(dplyr)
+```
+
+
+## Import the database
+
+```{r warning = FALSE}
+df <- read_excel("globalterrorismdb_0522dist.xlsx")
+head(df)
+```
+
+
+## Data cleaning 
+
+```{r}
+# Selected features
+features = c('country','latitude','longitude','success','suicide','attacktype1','targtype1','gname','claimed','weaptype1','nkill','nwound','property','ransom')
+df = df[features]
+str(df)
+```
+
+```{r}
+selected_gname = df %>%
+  filter(gname != 'Unknown') %>% 
+  group_by(gname) %>% 
+  count() %>% 
+  arrange(desc(n)) %>% 
+  head(10)
+  
+
+selected_gname # focus on these most active 10 terrorist groups
+```
+
+```{r}
+df2 = df %>% 
+  filter(gname %in% selected_gname$gname)
+head(df2)
+```
+
+
+```{r}
+df2[is.na(df2)] <- 0 # fill all NAs to 0
+str(df2)
+```
+
+## Create train/test set
+
+```{r}
+# create a function to split the train and test data set
+create_train_test = function(data, size = 0.8, train = TRUE) {
+    n_row = nrow(data)
+    total_row = size * n_row
+    train_sample = 1: total_row
+    if (train == TRUE) {
+        return (data[train_sample, ])
+    } else {
+        return (data[-train_sample, ])
+    }
+}
+```
+
+
+```{r}
+df_train <- create_train_test(df2, 0.8, train = TRUE)
+df_test <- create_train_test(df2, 0.8, train = FALSE)
+
+dim(df_train)
+```
+
+```{r}
+dim(df_test)
+```
+**Interpretation:** The train dataset has 37386 rows while the test dataset has 9347 rows.
+
+
+```{r}
+# verify if the randomization process is correct
+prop.table(table(df_train$gname))
+```
+
+```{r}
+# verify if the randomization process is correct
+prop.table(table(df_test$gname))
+```
+
+
+
+## Build Decision Tree Regressioin Models
+
+```{r}
+tree <- rpart(success ~ ., data = df_train, method = 'class')
+rpart.plot(tree, extra = 106)
+```
+
+## Measure performance
+
+```{r}
+# Function that measures the performance
+accuracy <- function(tree) {
+  
+    pred_test <- predict(tree, df_test, type = "class")
+
+    conf <- table(df_test$success, pred_test)
+    
+    accuracy <- sum(diag(conf))/sum(conf)
+    
+    accuracy
+}
+```
+
+```{r}
+accuracy(tree)
+```
+
+**Interpretation:** The accuracy is 89.97%. This indicates that these data are sufficient enough and appropriate for decision tree modeling.
+
+
+
+
+```{r}
+df$gname = as.factor(df$gname)
+fit <- rpart(gname ~ ., data = df_train, method = 'class')
+rpart.plot(fit, box.palette=0)
+```
+
+```{r}
+accuracy(fit)
+```
+
+**Interpretation:** The accuracy is 8.39%. This indicates that these data are not sufficient enough and appropriate for decision tree modeling.
+
+
+```{r}
+head(df2)
+```
+
+
+

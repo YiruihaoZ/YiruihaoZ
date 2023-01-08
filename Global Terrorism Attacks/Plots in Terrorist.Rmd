@@ -1,0 +1,141 @@
+---
+title: "Plots in Count"
+author: "Yihao Zhao"
+date: "12/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(sf)
+library(mapview)
+library(data.table)
+library(basemaps)
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+library(readxl)
+```
+
+```{r warning=FALSE}
+raw_data = read_excel("globalterrorismdb_0522dist.xlsx")
+setnames(raw_data,c("iyear","imonth","iday","country_txt","region_txt","attacktype1_txt","target1","nkill","nwound","summary","gname","targtype1_txt","weaptype1_txt","motive"),c("Year","Month","Day","Country","Region","AttackType","Target","Killed","Wounded","Summary","Group","Target_type","Weapon_type","Motive"))
+```
+
+```{r}
+selected_data= raw_data[,c('Year','Month','Day','Country','Region','city','latitude','longitude','AttackType','Killed','Wounded','Target','Summary','Group','Target_type','Weapon_type','Motive'),]
+```
+
+```{r}
+selected_gname = selected_data %>%
+  filter(Group != 'Unknown') %>% 
+  group_by(Group) %>% 
+  count() %>% 
+  arrange(desc(n)) %>% 
+  head(10)
+
+df = selected_data %>% 
+  filter(Group %in% selected_gname$Group)
+ 
+#df[is.na(df)] = 0
+
+
+df = df %>% 
+  mutate(Group = recode(Group, "New People's Army (NPA)" = "NPA",
+                               "Irish Republican Army (IRA)" = "IRA",
+                               "Shining Path (SL)" = "SL",
+                               "Farabundo Marti National Liberation Front (FMLN)" = "FMLN",
+                               "Kurdistan Workers' Party (PKK)" = "PKK",
+                               "Houthi extremists (Ansar Allah)" = "Ansar Allah",
+                               "Islamic State of Iraq and the Levant (ISIL)" = "ISIL"
+         ))
+str(df)
+
+```
+
+```{r}
+df_attack_type = df %>% 
+  group_by(Group) %>% 
+  count(AttackType)
+```
+
+
+
+```{r}
+# AttackType Counts By Groups
+options(repr.plot.width=8, repr.plot.height=3)
+ggplot(df_attack_type, aes(x = Group, y = n, fill = AttackType)) +
+         geom_bar(stat = "identity") +
+         coord_flip() + scale_y_continuous(name="Frequency of The Attack Type") +
+  scale_x_discrete(name="Group") +
+theme(axis.text.x = element_text(face="bold", color="#008000",
+                           size=8, angle=0),
+          axis.text.y = element_text(face="bold", color="#008000",
+                           size=8, angle=0))
+```
+
+```{r}
+# Attack Count By Region
+df_region = df %>% 
+  group_by(Group) %>% 
+  count(Region)
+
+options(repr.plot.width=8, repr.plot.height=3)
+ggplot(df_region, aes(x = Group, y = n, fill = Region)) +
+         geom_bar(stat = "identity") +
+         coord_flip() + scale_y_continuous(name="Frequency of The Region") +
+  scale_x_discrete(name="Group") +
+theme(axis.text.x = element_text(face="bold", color="#008000",
+                           size=8, angle=0),
+          axis.text.y = element_text(face="bold", color="#008000",
+                           size=8, angle=0))
+```
+
+
+```{r}
+# Attack Count By Target type
+df_target = df %>% 
+  group_by(Group) %>% 
+  count(Target_type)
+
+options(repr.plot.width=8, repr.plot.height=3)
+ggplot(df_target, aes(x = Group, y = n, fill = Target_type)) +
+         geom_bar(stat = "identity") +
+         coord_flip() + scale_y_continuous(name="Frequency of The Target Type") +
+  scale_x_discrete(name="Group") +
+theme(axis.text.x = element_text(face="bold", color="#008000",
+                           size=8, angle=0),
+          axis.text.y = element_text(face="bold", color="#008000",
+                           size=8, angle=0))
+```
+
+```{r}
+df_weapon = df %>% 
+  group_by(Group) %>% 
+  count(Weapon_type) %>% 
+  mutate(Weapon_type = recode(Weapon_type, "Vehicle (not to include vehicle-borne explosives, i.e., car or truck bombs)" = "Vehicle"))
+
+
+ggplot(df_weapon, aes(x = Group, y = n, fill = Weapon_type)) +
+         geom_bar(stat = "identity") +
+         coord_flip() + scale_y_continuous(name="Frequency of Weapon Useage") +
+  scale_x_discrete(name="Group")
+```
+
+```{r}
+df$Wounded[is.na(df$Wounded)] = 0
+df$Killed[is.na(df$Killed)] = 0
+df_killed = df %>% 
+  group_by(Group) %>% 
+  summarise(total_killed_Wounded = sum(Killed + Wounded))
+  
+
+ggplot(df_killed, aes(x = Group, y = total_killed_Wounded, fill = total_killed_Wounded)) +
+         geom_bar(stat = "identity") +
+         coord_flip() + scale_y_continuous(name="Count of Killed and Wounded") +
+  scale_x_discrete(name="Group")
+```
+
+
+
