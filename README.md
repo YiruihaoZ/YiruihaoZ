@@ -1,6 +1,6 @@
 - 👋 Hi, I’m Yihao Zhao.
 - 👀 I’m interested in data analysis and data science.
-- 🌱 I’m currently learning at the Unversity of Illinois at Champaign-Urbana and majoring in the STEM major of Statistics.
+- 🌱 I have graduated from the Unversity of Illinois at Champaign-Urbana with a bachelor’s degree in Statistics.
 - 💞️ I’m looking to a full time job of data analyst/data scientist.
 - 📫 How to reach me: Phone: (509)-230-9707, Email: yihaoz3564@gmail.com
 
