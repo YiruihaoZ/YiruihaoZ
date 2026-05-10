@@ -1,0 +1,219 @@
+---
+title: "Cluster Genes (Liver) Analysis of Mice to Different Chemicals"
+subtitle: "building a dose-response model that can make analysis in toxicogenomic studies more computationally and statistically efficient"
+institute: The Ohio State University
+author: Yihao Zhao
+date: 2025-03-31
+execute:
+    echo: true
+knitr: 
+    opts_chunk:
+        message: false
+        warning: false
+format: 
+    html:
+        toc: true
+        embed-resources: true
+---
+
+```{r}
+#| echo: true
+# Load libraries
+library(readr)
+library(tidyverse)
+library(pheatmap)
+```
+
+```{r}
+# import data
+concat_rna <- read_table("Concat rma no AFFX.txt", col_types = cols())
+
+all_attribute <- read_delim("Open-tggates_AllAttribute.txt", delim = "\t", col_types = cols()) |> 
+  rename(barcode = BARCODE)
+
+pathologies_wih_zero <- read_delim("pathologies_with_zeroes.txt", delim = "\t", col_types = cols())
+```
+
+```{r}
+# Missing barcodes
+nrow(all_attribute) - sum(all_attribute$barcode == "No ChipData")
+```
+
+
+```{r}
+# keep all rows from concat_rna and match rows from all_attribute
+df <- left_join(concat_rna, all_attribute, by = "barcode") |> 
+  filter(ORGAN_ID == "Liver") |> # only need liver data
+  relocate(ORGAN_ID)
+
+head(df)
+```
+
+# Hierarchical clustering of genes based on expression levels under zero exposure.
+
+```{r}
+# a.Extract both expression and phenotypic data and subset to baseline samples (dose= 0 mg/kg).
+df_baseline <- df |> 
+  filter(DOSE == 0)
+```
+
+```{r}
+# b.Transpose the expression data, calculate the standard deviation for each gene and filter out genes with variance below the median.
+
+# To get only the gene expression data
+df_expression <- df_baseline |> 
+  select(ends_with("_at"))
+
+# Transpose the expression data
+df_expression_t <- t(df_expression)
+
+# Standard deviation of each row and column
+sds <- colSds(df_expression_t)
+
+# Filtering variance > median variance across genes
+df_expression_t_filter <- df_expression_t[, sds > median(sds)]
+
+# Similarity measure: use absolute correlation between genes 
+cormat = cor(xt_filter)
+
+# distance
+d = 1 - abs(cormat)
+
+# Hierarchical clustering
+#hclust_complete = hclust(as.dist(d), method = "complete")
+
+#plot(hclust_complete, labels = FALSE)
+
+hclust_ward = hclust(as.dist(d), method = "ward.D2")
+
+dendro_plot = plot(hclust_ward, labels = FALSE)
+```
+
+```{r}
+
+```
+
+
+# K-means clustering of genes based on change in expression following exposure.
+
+```{r}
+# 1.Calculate the mean expression for control samples (does = 0 mm/kg) by COMPOUND_NAME and duration
+control_mean <- df |> 
+  filter(DOSE == 0) |> 
+  relocate(DOSE, COMPOUND_NAME, duration) |> 
+  #group_by(COMPOUND_NAME, duration) |> 
+  group_by(COMPOUND_NAME, duration) |> 
+  summarize(across(ends_with("_at"), ~ mean(.x, na.rm = TRUE)), .groups = "drop")
+  
+head(control_mean)
+```
+
+```{r}
+# 2.Calculate the mean expression for exposed samples (does ≠ 0 mm/kg) for each compound by grouping the same variables as above plus “compound”.
+compound_mean <-  df |> 
+  filter(DOSE != 0) |> 
+  #relocate(COMPOUND_NAME, duration) |> 
+  group_by(COMPOUND_NAME, duration) |> 
+  summarize(across(ends_with("_at"), ~ mean(.x, na.rm = TRUE)), .groups = "drop")
+
+head(compound_mean)
+```
+
+```{r}
+# 3.Calculate the difference in mean expression between control and exposed samples by grouping the same variables as in step 1.
+mean_diff <- control_mean |> 
+  inner_join(compound_mean, join_by(COMPOUND_NAME, duration), suffix = c("_control", "_exposed")) |> 
+  mutate(across(ends_with("_control"), ~ . - get(sub("_control", "_exposed", cur_column())), .names = "diff_{col}"))
+
+head(mean_diff)
+```
+
+```{r}
+# 4.Filter out the genes with a variance lower than the median variance across genes.
+
+# Compute variance for each gene (selecting only diff_ columns)
+gene_var <- mean_diff |> 
+  select(starts_with("diff_")) |> 
+  summarise(across(everything(), ~ var(.x, na.rm = TRUE)), .groups = "drop")
+
+# Compute median variance
+median_var <- median(unlist(gene_var), na.rm = TRUE)
+
+# Select genes with variance above the median
+high_var_genes <- names(gene_var)[unlist(gene_var) > median_var]
+
+# Keep grouping columns + high-variance genes
+grouping_cols <- c(COMPOUND_NAME, duration)
+
+filtered_mean_diff <- mean_diff |> 
+  select(all_of(high_var_genes))
+
+head(filtered_mean_diff)
+```
+
+```{r}
+# 5.Use the Elbow method to find the optimal number of clusters.
+# transpose the filtered_mean_diff
+filtered_mean_diff_t <- t(filtered_mean_diff)
+
+cluster_data <- filtered_mean_diff_t
+
+#remove rows with missing values
+cluster_data <- na.omit(cluster_data)
+
+#scale each variable to have a mean of 0 and sd of 1
+cluster_data <- scale(cluster_data)
+
+#create plot of number of clusters vs total within sum of squares
+fviz_nbclust(cluster_data, kmeans, method = "wss")
+```
+
+```{r}
+# 6) Perform K means clustering of genes based on change in expression following exposure.
+
+# Perform K-means clustering 
+set.seed(123)  # For reproducibility
+k <- 3 # Optimal number of cluster
+km <- kmeans(cluster_data, centers = k, nstart = 25)
+```
+
+
+```{r}
+# use a for-loop to process clusters 1..k
+for (c in seq_len(k)) {
+  cat("\n=== K-means cluster", c, "===\n")
+  
+  # Genes in cluster c
+  cluster_genes <- rownames(cluster_data)[km$cluster == c]
+  
+  # If the cluster has fewer than 2 genes, skip
+  if (length(cluster_genes) < 2) {
+    cat("Skipping cluster", c, "because it has < 2 genes.\n")
+    next
+  }
+  
+  # Subset the transposed matrix to these genes
+  # rows = genes, columns = observations
+  submat_t <- cluster_data[cluster_genes, , drop = FALSE]
+
+  cor_mat <- cor(submat_t, method = "pearson", use = "pairwise.complete.obs")
+  
+  # 3.1b) Optionally convert correlation to distance
+  dist_mat <- as.dist(1 - abs(cor_mat))
+  
+  # 3.1c) Hierarchical clustering on that distance
+  hc <- hclust(dist_mat, method = "ward.D2")
+  
+  # 3.1d) Heatmap: The matrix to plot is the correlation matrix (genes x genes)
+  pheatmap(
+    cor_mat,
+    cluster_rows = hc,
+    cluster_cols = hc,
+    # Alternatively,can let pheatmap do "distance = 1 - correlation" automatically,
+    main = paste("Gene-to-Gene Correlation - K-means Cluster", c),
+    show_rownames = FALSE, # set to TRUE if want to see gene labels
+    show_colnames = FALSE
+  )
+}
+```
+

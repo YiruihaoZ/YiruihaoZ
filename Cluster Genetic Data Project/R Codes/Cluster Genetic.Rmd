@@ -1,0 +1,263 @@
+---
+title: "Clustering Genetic Data"
+author: "Yihao Zhao"
+date: '2024-10-08'
+output: html_document
+---
+
+```{r}
+#install packages
+
+#install.packages("R.utils")
+#install.packages("data.table")
+```
+
+```{r}
+#loading library
+library(R.utils)
+```
+
+
+```{r}
+# Extracting a .tar file
+untar("/Users/yihaozhao/Downloads/GSE57815_RAW.tar", exdir = "/Users/yihaozhao/Desktop/Cluster Genetic Data Project/data2")
+```
+
+```{r}
+
+# Uncompress all the .gz files in the directory
+file_list <- list.files("/Users/yihaozhao/Desktop/Cluster Genetic Data Project/data2", pattern = "\\.gz$", full.names = TRUE)
+
+# Uncompress each .gz file
+lapply(file_list, function(file) {
+  R.utils::gunzip(file, remove = FALSE)  # remove = FALSE keeps the original .gz files
+})
+
+
+
+```
+
+```{r}
+# List all the .txt files
+txt_files <- list.files("/Users/yihaozhao/Desktop/Cluster Genetic Data Project/data", pattern = "\\.txt$", full.names = TRUE)
+
+# Read all the .txt files into R
+data_list <- lapply(txt_files, read.table, header = TRUE, sep = "\t")
+
+# Combine all the data frames into one (assuming same structure)
+combined_data <- do.call(rbind, data_list)
+```
+```{r}
+# Reading the .txt file
+data <- read.table("GSM1456472_T00114883_2002-09-23.txt", header = TRUE, sep = "\t", fill = TRUE)
+
+# Inspect the first few rows
+head(data)
+
+# Check the structure of the data
+str(data)
+```
+
+```{r}
+# Reading a tab-separated .txt file
+data <- read.table("/Users/yihaozhao/Desktop/Cluster Genetic Data Project/data/GSM1456472_T00114883_2002-09-23.txt", header = TRUE, sep = "\t")
+data
+```
+```{r}
+# Load the data and skip the header lines
+
+data <- fread("/Users/yihaozhao/Desktop/Cluster Genetic Data Project/data/GSM1456472_T00114883_2002-09-23 2.txt", 
+                     skip = 8, 
+                     sep = "\t", 
+                     header = TRUE, 
+                     stringsAsFactors = FALSE, 
+                     fill = Inf,
+                     na.strings = "")
+
+# Remove any rows that contain only dashed lines
+data <- data[!grepl("^[-]+$", data[,1]), ]
+
+# Preview the cleaned data
+head(data)
+```
+
+```{r}
+library(data.table)
+# Step 1: List all the text files in the directory
+file_list <- list.files(path = "/Users/yihaozhao/Desktop/Cluster Genetic Data Project/data", pattern = "*.txt$", full.names = TRUE)
+
+# Step 2: Define a function to read and clean a single file
+read_and_clean_file <- function(file) {
+  # Read the file, skipping the first 8 lines, handling tab-separated values
+  data <- fread(file, 
+                     skip = 8, 
+                     sep = "\t", 
+                     header = TRUE, 
+                     stringsAsFactors = FALSE, 
+                     fill = Inf,
+                     na.strings = "")
+  
+  # Remove any rows where the first column contains dashed lines
+  data <- data[!grepl("^[-]+$", data[, 1]), ]
+  
+  return(data)
+}
+
+# Step 3: Loop over all files and read them into a list of data frames
+all_data <- lapply(file_list, read_and_clean_file)
+
+# Step 4: Combine all the data frames into a single data frame
+combined_data <- rbindlist(all_data, fill = TRUE)
+
+```
+
+```{r}
+# Step 5: Preview the first few rows of the combined data
+head(combined_data)
+
+# Step 6: (Optional) Save the combined data to a CSV file if needed
+write.csv(combined_data, "combined_data.csv", row.names = FALSE)
+```
+
+```{r}
+affymetric_label = fread("/Users/yihaozhao/Desktop/Cluster Genetic Data Project/Affymetrix_Microarray_Data_Labels_spreadsheet_02_23_2012.txt",
+                     sep = "\t", 
+                     header = TRUE, 
+                     stringsAsFactors = FALSE, 
+                     fill = Inf,
+                     na.strings = "")
+affymetric_label
+```
+```{r}
+freq_table <- table(affymetric_label$CHEMICAL)
+freq_table
+```
+
+
+```{r}
+# First, in R download and install Bioconductor using
+ 
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install(version = "3.19")
+ 
+# Then install the GEOquery package:
+ 
+BiocManager::install("GEOquery")
+ 
+# Once installed, load this package
+ 
+library(GEOquery)
+ 
+# Then you can download any pre-processes data posted to Gene Expression Omnibus using
+ 
+drugdata <- getGEO("GSE57815")[[1]]
+#methods(class=class(drugdata))
+# Aside: The getGEO function will download a list – usually there is only one component in the list as in the case with your data which is why I used the [[1]] notation – you should check if multiple platforms were used and pull the correct item from the list.
+
+ help("ExpressionSet-class")
+# The expression data can be extracted using the exprs() extractor function:
+ 
+expression=exprs(drugdata)  # this is G by N (number of genes by number of samples)
+print(expression)
+
+# The phenotypic data can be extracted using the pData() extractor function:
+ 
+pData(drugdata)  # this is N by P (number of samples by number of phenotypic variables)
+
+table(pData(drugdata)$"dose:ch1", pData(drugdata)$"time:ch1")
+
+baseline <- drugdata[,pData(drugdata)$"dose:ch1"=="0 mg/kg" & pData(drugdata)$"time:ch1"=="0.25 d"]
+exprs(baseline)
+dim(exprs(baseline))
+pData(baseline)
+
+
+# select samples : Dose = 0 mg/kg, any duration
+baseline2 <- drugdata[, pData(drugdata)$"dose:ch1" == "0 mg/kg"]
+x = exprs(baseline2)
+dim(exprs(baseline2))
+pData(baseline2)
+
+# Similarly measure
+xt = t(x) # transpose of data
+print(x)
+dim(xt)
+
+```
+
+
+```{r}
+BiocManager::instaxtll("annotate")
+library(annotate)
+baseline_genedata <- t
+
+BiocManager::install("rat2302.db")
+library("rat2302.db")
+symbol <- getSYMBOL(featureNames(baseline), "rat2302.db")
+head(symbol)
+```
+
+
+```{r}
+# First, in R download and install Bioconductor using
+ 
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install(version = "3.19")
+ 
+# Then install the GEOquery package:
+ 
+BiocManager::install("GEOquery")
+```
+
+
+```{r}
+# Once installed, load this package
+library(GEOquery)
+
+drugdata <- getGEO("GSE57815")[[1]]
+#methods(class=class(drugdata))
+# Aside: The getGEO function will download a list – usually there is only one component in the list as in the case with your data which is why I used the [[1]] notation – you should check if multiple platforms were used and pull the correct item from the list.
+
+ help("ExpressionSet-class")
+ 
+# The expression data can be extracted using the exprs() extractor function:
+expression=exprs(drugdata)  # this is G by N (number of genes by number of samples)
+
+# The phenotypic data can be extracted using the pData() extractor function:
+pData(drugdata)  # this is N by P (number of samples by number of phenotypic variables)
+
+# select samples : Dose = 0 mg/kg, any duration
+baseline2 <- drugdata[, pData(drugdata)$"dose:ch1" == "0 mg/kg"]
+x = exprs(baseline2)
+
+```
+
+
+```{r}
+#install.packages("matrixStats")
+library(matrixStats)
+
+xt = t(x) # transpose of data
+sds = colSds(xt) # standard deviations of each rows and columns
+boxplot(sds)
+
+# filtering variance > median variance across genes
+xt_filter = xt[, sds > median(sds)]
+dim(xt_filter)
+
+# Similarity measure: use absolute correlation between genes 
+cormat = cor(xt_filter)
+dim(d)
+
+# distance
+d = 1 - abs(cormat)
+
+# Hierarchical clustering
+hclust_complete = hclust(as.dist(d), method = "complete")
+plot(hclust_complete)
+
+```
+
+

@@ -1,0 +1,308 @@
+---
+title: "Cluster Genetic of rat's liver to different chemicals"
+author: "Yihao Zhao"
+date: "2024-11-06"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, eval = FALSE}
+# First, in R download and install Bioconductor using
+ 
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install(version = "3.19")
+ 
+# Then install the GEOquery package:
+ 
+BiocManager::install("GEOquery")
+```
+
+
+```{r, eval = FALSE}
+# Once installed, load this package
+library(GEOquery)
+
+drugdata <- getGEO("GSE57815")[[1]]
+#methods(class=class(drugdata))
+# Aside: The getGEO function will download a list – usually there is only one component in the list as in the case with your data which is why I used the [[1]] notation – you should check if multiple platforms were used and pull the correct item from the list.
+
+ #help("ExpressionSet-class")
+ 
+# The expression data can be extracted using the exprs() extractor function:
+#expression=exprs(drugdata)  # this is G by N (number of genes by number of samples)
+
+# The phenotypic data can be extracted using the pData() extractor function:
+y = pData(drugdata)  # this is N by P (number of samples by number of phenotypic variables)
+
+# select samples : Dose = 0 mg/kg, any duration
+baseline2 <- drugdata[, pData(drugdata)$"dose:ch1" == "0 mg/kg"]
+x = exprs(baseline2)
+
+
+```
+
+
+```{r}
+#install.packages("matrixStats")
+#install.packages("ggplot2")
+library(matrixStats)
+library(ggplot2)
+
+xt = t(x) # transpose of data
+sds = colSds(xt) # standard deviations of each rows and columns
+#boxplot(sds)
+
+# filtering variance > median variance across genes
+xt_filter = xt[, sds > median(sds)]
+#dim(xt_filter)
+
+# Similarity measure: use absolute correlation between genes 
+cormat = cor(xt_filter)
+#dim(d)
+
+# distance
+d = 1 - abs(cormat)
+
+# Hierarchical clustering
+#hclust_complete = hclust(as.dist(d), method = "complete")
+
+#plot(hclust_complete, labels = FALSE)
+
+hclust_ward = hclust(as.dist(d), method = "ward.D2")
+
+dendro_plot = plot(hclust_ward, labels = FALSE)
+
+dendro_plot
+```
+
+
+
+```{r}
+# Transpose the expression data
+exprs_transposed <- t(exprs(drugdata))
+pdata  = pData(drugdata)
+
+# Combine the data#########
+combined <- cbind(exprs_transposed, pData(drugdata))
+
+tail(colnames(combined), 51)
+```
+
+
+
+
+```{r}
+library(dplyr)
+
+# 1) Calculate expression means for controls (dose=0)
+controls_mean = combined %>%
+  filter(`dose:ch1` == "0 mg/kg") %>% 
+  group_by(`vehicle:ch1`,
+           `time:ch1`,
+           `tissue:ch1`,
+           `route:ch1`,
+           `Sex:ch1`,
+           `hybridization date:ch1`,
+           `strain:ch1`) %>% 
+  summarise(across(where(is.numeric), mean, na.rm = TRUE), .groups = "drop")
+
+head(controls_mean)
+```
+
+
+```{r}
+# 2) For each compound, calculate mean expression according to levels of a-g above. Don’t separate according to dose level
+compound_mean = combined %>%
+  group_by(`compound:ch1`, 
+           `vehicle:ch1`,
+           `time:ch1`,
+           `tissue:ch1`,
+           `route:ch1`,
+           `Sex:ch1`,
+           `hybridization date:ch1`,
+           `strain:ch1`) %>% 
+  summarise(across(where(is.numeric), mean, na.rm = TRUE), .groups = "drop")
+
+head(compound_mean)
+```
+
+```{r}
+compound_mean2 = combined %>%
+  filter(`dose:ch1` == "0 mg/kg") %>% 
+  group_by(`compound:ch1`, 
+           `vehicle:ch1`,
+           `time:ch1`,
+           `tissue:ch1`,
+           `route:ch1`,
+           `Sex:ch1`,
+           `hybridization date:ch1`,
+           `strain:ch1`) %>% 
+  summarise(across(where(is.numeric), mean, na.rm = TRUE), .groups = "drop")
+
+head(compound_mean2)
+```
+
+```{r}
+compound_mean3 = combined %>%
+  filter(`dose:ch1` != "0 mg/kg") %>% 
+  group_by(`compound:ch1`, 
+           `vehicle:ch1`,
+           `time:ch1`,
+           `tissue:ch1`,
+           `route:ch1`,
+           `Sex:ch1`,
+           `hybridization date:ch1`,
+           `strain:ch1`) %>% 
+  summarise(across(where(is.numeric), mean, na.rm = TRUE), .groups = "drop")
+
+head(compound_mean3)
+```
+
+```{r}
+# 3) Calculate difference in mean expression for controls and exposed that match in terms of a-g above
+mean_diff <- controls_mean %>%
+  inner_join(compound_mean2, by = c("vehicle:ch1",
+                                    "time:ch1",
+                                    "tissue:ch1",
+                                    "route:ch1",
+                                    "Sex:ch1",
+                                    "hybridization date:ch1",
+                                    "strain:ch1"), suffix = c("_control", "_exposed")) %>%
+  mutate(across(ends_with("_control"), ~ . - get(sub("_control", "_exposed", cur_column())), .names = "diff_{col}"))
+
+head(mean_diff)
+```
+
+
+```{r}
+# 4) Calculate the mean difference in expression for each gene, averaged across compound.
+# Doing the subtraction as matrix operations.
+
+diff_cols <- mean_diff %>%
+  select(starts_with("diff_"))
+
+mean_diff_genes <- colMeans(as.matrix(diff_cols), na.rm = TRUE)
+
+```
+
+```{r}
+# 5) Perform K means clustering of genes based on change in expression following exposure.
+cluster_data <- t(as.data.frame(mean_diff_genes))
+
+# Perform K-means clustering 
+set.seed(123)  # For reproducibility
+k <- 5 # Example
+kmeans_result <- kmeans(clustering_data, centers = k)
+
+# View cluster assignments
+cluster_assignments <- data.frame(
+  Gene = rownames(clustering_data),
+  Cluster = kmeans_result$cluster
+)
+
+print(cluster_assignments)
+
+```
+
+
+```{r}
+# 3) Calculate difference in mean expression for controls and exposed that match in terms of a-g above
+# Separate data into controls and exposed
+controls <- combined %>%
+  filter(`dose:ch1` == "0 mg/kg")
+
+exposed <- combined %>%
+  filter(`dose:ch1` != "0 mg/kg")
+
+# Calculate mean expression grouped by a-g for both controls and exposed
+means_controls <- controls %>%
+  group_by(`vehicle:ch1`,
+           `time:ch1`,
+           `tissue:ch1`,
+           `route:ch1`,
+           `Sex:ch1`,
+           `hybridization date:ch1`,
+           `strain:ch1`) %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE), .groups = "drop")
+
+means_exposed <- exposed %>%
+  group_by(`vehicle:ch1`,
+           `time:ch1`,
+           `tissue:ch1`,
+           `route:ch1`,
+           `Sex:ch1`,
+           `hybridization date:ch1`,
+           `strain:ch1`) %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE), .groups = "drop")
+
+# Calculate the difference in mean expression for matched groups
+mean_diff <- means_controls %>%
+  inner_join(means_exposed, by = c("Vehicle", "Time", "Tissue", "Route", "Sex", "hybridization date", "Strain"), 
+             suffix = c("_control", "_exposed")) %>%
+  mutate(across(ends_with("_control"), ~ . - get(sub("_control", "_exposed", cur_column())), .names = "diff_{col}"))
+```
+
+```{r}
+library(pheatmap)
+my_palette <- colorRampPalette(c("blue", "yellow", "red"))(100)
+
+pheatmap(cormat, 
+         color = my_palette,
+         cluster_rows = TRUE,
+         cluster_cols = TRUE,
+         show_rownames = FALSE,
+         show_colnames = FALSE,
+         scale = "none",
+         main = "Heatmap of Correlation Matrix (Subset)")
+```
+
+```{r}
+pheatmap(cormat_small, 
+         color = my_palette, 
+         cluster_rows = FALSE, 
+         cluster_cols = FALSE, 
+         scale = "none",
+         main = "Heatmap of Correlation Matrix",
+         fontsize_row = 5,             # Reduce font size for row labels
+         fontsize_col = 5)             # Reduce font size for column labels
+```
+
+```{r}
+pheatmap(cormat_small, 
+         color = my_palette, 
+         cluster_rows = FALSE, 
+         cluster_cols = FALSE, 
+         scale = "none",
+         show_rownames = FALSE,        # Hide row labels
+         show_colnames = FALSE,        # Hide column labels
+         main = "Heatmap of Correlation Matrix")
+```
+
+
+```{r}
+library(pheatmap)
+# Define a custom color palette
+#my_palette <- colorRampPalette(c("blue", "white", "red"))(100)
+
+# Plot the heatmap with pheatmap (it includes a color key by default)
+pheatmap(cormat, 
+         #color = my_palette,           # Custom color palette
+         cluster_rows = TRUE,           # Row clustering
+         cluster_cols = TRUE,           # Column clustering
+         scale = "none",                # No scaling to keep original values
+         main = "Heatmap of Correlation Matrix")
+```
+
+
+```{r}
+#install.packages("gplots")
+library(gplots)
+# Use the heatmap function to plot the correlation matrix with the dendrogram
+heatmap(cormat, Rowv = as.dendrogram(hclust_ward), Colv = as.dendrogram(hclust_ward), symm = TRUE)
+```
+
+
+
+
